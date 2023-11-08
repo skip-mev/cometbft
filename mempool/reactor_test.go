@@ -259,6 +259,86 @@ func TestDontExhaustMaxActiveIDs(t *testing.T) {
 	}
 }
 
+// Test the experimental feature that limits the number of outgoing connections for gossiping
+// transactions.
+func TestMempoolReactorMaxActiveOutboundConnections(t *testing.T) {
+	config := cfg.TestConfig()
+	config.Mempool.ExperimentalMaxUsedOutboundPeers = 1
+	reactors, _ := makeAndConnectReactors(config, 4)
+	defer func() {
+		for _, r := range reactors {
+			if err := r.Stop(); err != nil {
+				assert.NoError(t, err)
+			}
+		}
+	}()
+	for _, r := range reactors {
+		for _, peer := range r.Switch.Peers().List() {
+			peer.Set(types.PeerStateKey, peerState{1})
+		}
+	}
+
+	// Add a bunch transactions to the first reactor.
+	txs := newUniqueTxs(100)
+	callCheckTx(t, reactors[0].mempool, txs)
+
+	// Wait for all txs to be in the mempool of the second reactor; the third and fourth reactor
+	// should not receive any tx.
+	checkTxsInMempool(t, txs, reactors[1], 0)
+	require.Zero(t, reactors[2].mempool.Size())
+	require.Zero(t, reactors[3].mempool.Size())
+
+	// In the first reactor, disconnect the second reactor; the third reactor should become active.
+	firstPeer := reactors[0].Switch.Peers().List()[0]
+	reactors[0].Switch.StopPeerGracefully(firstPeer)
+
+	// Now the third reactor should receive the transactions; the fourth reactor's mempool should
+	// still be empty.
+	checkTxsInMempool(t, txs, reactors[2], 0)
+	require.Zero(t, reactors[3].mempool.Size())
+}
+
+// Call CheckTx on a given mempool on each transaction in the list.
+func callCheckTx(t *testing.T, mp Mempool, txs types.Txs) {
+	for i, tx := range txs {
+		if err := mp.CheckTx(tx, func(rct *abci.ResponseCheckTx) {}, TxInfo{}); err != nil {
+			// Skip invalid txs.
+			// TestMempoolFilters will fail otherwise. It asserts a number of txs
+			// returned.
+			if IsPreCheckError(err) {
+				continue
+			}
+			t.Fatalf("CheckTx failed: %v while checking #%d tx", err, i)
+		}
+	}
+}
+
+// Wait until the mempool has a certain number of transactions.
+func waitForNumTxsInMempool(numTxs int, mempool Mempool) {
+	for mempool.Size() < numTxs {
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+// Wait until all txs are in the mempool and check that the number of txs in the
+// mempool is as expected.
+func checkTxsInMempool(t *testing.T, txs types.Txs, reactor *Reactor, _ int) {
+	waitForNumTxsInMempool(len(txs), reactor.mempool)
+
+	reapedTxs := reactor.mempool.ReapMaxTxs(len(txs))
+	require.Equal(t, len(txs), len(reapedTxs))
+	require.Equal(t, len(txs), reactor.mempool.Size())
+}
+
+
+func newUniqueTxs(n int) types.Txs {
+	txs := make(types.Txs, n)
+	for i := 0; i < n; i++ {
+		txs[i] = kvstore.NewTxFromID(i)
+	}
+	return txs
+}
+
 // mempoolLogger is a TestingLogger which uses a different
 // color for each validator ("validator" key must exist).
 func mempoolLogger() log.Logger {

@@ -794,7 +794,7 @@ func (cfg *MempoolConfig) ValidateBasic() error {
 		return errors.New("max_tx_bytes can't be negative")
 	}
 	if cfg.ExperimentalMaxUsedOutboundPeers < 0 {
-		return cmterrors.ErrNegativeField{Field: "experimental_max_used_outbound_peers"}
+		return errors.New("experimental_max_used_outbound_peers cannot be negative")
 	}
 	return nil
 }
