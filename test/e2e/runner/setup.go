@@ -174,6 +174,7 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	cfg.StateSync.DiscoveryTime = 5 * time.Second
 	cfg.BlockSync.Version = node.BlockSyncVersion
 	cfg.Consensus.PeerGossipIntraloopSleepDuration = node.Testnet.PeerGossipIntraloopSleepDuration
+	cfg.Mempool.ExperimentalMaxUsedOutboundPeers = int(node.Testnet.ExperimentalMaxUsedOutboundPeers)
 
 	switch node.ABCIProtocol {
 	case e2e.ProtocolUNIX:
