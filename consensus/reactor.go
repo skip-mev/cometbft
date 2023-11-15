@@ -736,6 +736,12 @@ func (conR *Reactor) gossipVotesRoutine(peer p2p.Peer, ps *PeerState) {
 	// Simple hack to throttle logs upon sleep.
 	sleeping := 0
 
+	consAddrHexBz, err := hex.DecodeString(string(peer.ID()))
+	if err != nil {
+		return
+	}
+	consAddr := crypto.Address(consAddrHexBz)
+
 OUTER_LOOP:
 	for {
 
@@ -762,15 +768,15 @@ OUTER_LOOP:
 			sleeping = 0
 		}
 
-		consAddrHexBz, err := hex.DecodeString(string(peer.ID()))
-		if err != nil {
-			logger.Error("error decoding peer ID", "rs.Height", rs.Height, "prs.Height", prs.Height)
-			continue OUTER_LOOP
+		// if the proposer is in our peerlist && proposer is the function peer, send the extensions
+		// if the proposer is in our peerlist && proposer is not function peer, do not send the extensions
+		// else if the proposer is not in our peerlist, send extensions to all
+		sendExtensions := true
+		proposerPeerID := p2p.PubKeyToID(rs.Validators.Proposer.PubKey)
+		if conR.Switch.IsPeerUnconditional(proposerPeerID) {
+			proposer := rs.Validators.Proposer.Address
+			sendExtensions = bytes.Equal(consAddr, proposer)
 		}
-
-		consAddr := crypto.Address(consAddrHexBz)
-		proposer := rs.Validators.Proposer.Address
-		isProposer := bytes.Equal(consAddr, proposer)
 
 		// logger.Debug("gossipVotesRoutine", "rsHeight", rs.Height, "rsRound", rs.Round,
 		// "prsHeight", prs.Height, "prsRound", prs.Round, "prsStep", prs.Step)
@@ -778,7 +784,7 @@ OUTER_LOOP:
 		// If height matches, then send LastCommit, Prevotes, Precommits.
 		if rs.Height == prs.Height {
 			heightLogger := logger.With("height", prs.Height)
-			if conR.gossipVotesForHeight(heightLogger, rs, prs, ps, isProposer) {
+			if conR.gossipVotesForHeight(heightLogger, rs, prs, ps, sendExtensions) {
 				continue OUTER_LOOP
 			}
 		}
@@ -872,7 +878,7 @@ func (conR *Reactor) gossipVotesForHeight(
 	}
 	// If there are precommits to send...
 	if prs.Step <= cstypes.RoundStepPrecommitWait && prs.Round != -1 && prs.Round <= rs.Round {
-		if ps.PickSendVote(rs.Votes.Precommits(prs.Round), isProposer) {
+		if ps.PickSendVote(rs.Votes.Precommits(prs.Round), true) {
 			logger.Debug("Picked rs.Precommits(prs.Round) to send", "round", prs.Round)
 			return true
 		}
