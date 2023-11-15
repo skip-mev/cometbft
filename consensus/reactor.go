@@ -773,7 +773,7 @@ OUTER_LOOP:
 		// else if the proposer is not in our peerlist, send extensions to all
 		sendExtensions := true
 		proposerPeerID := p2p.PubKeyToID(rs.Validators.Proposer.PubKey)
-		if conR.Switch.IsPeerUnconditional(proposerPeerID) {
+		if conR.Switch.Peers().Has(proposerPeerID) {
 			proposer := rs.Validators.Proposer.Address
 			sendExtensions = bytes.Equal(consAddr, proposer)
 		}
