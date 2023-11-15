@@ -330,7 +330,6 @@ func checkTxsInMempool(t *testing.T, txs types.Txs, reactor *Reactor, _ int) {
 	require.Equal(t, len(txs), reactor.mempool.Size())
 }
 
-
 func newUniqueTxs(n int) types.Txs {
 	txs := make(types.Txs, n)
 	for i := 0; i < n; i++ {
