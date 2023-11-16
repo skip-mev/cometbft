@@ -2180,7 +2180,7 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 			len(vote.ExtensionSignature) > 0 &&
 			len(vote.Extension) > 0 {
 			// Skip the VerifyVoteExtension call if the vote was issued by this validator.
-			// Skip the VerifyVoteExtension if this validator is not the proposer
+			// Skip the VerifyVoteExtension if this validator is not the next proposer
 
 			// The core fields of the vote message were already validated in the
 			// consensus reactor when the vote was received.
