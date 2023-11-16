@@ -2176,7 +2176,7 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 		// https://github.com/tendermint/tendermint/issues/8487
 		if vote.Type == cmtproto.PrecommitType && !vote.BlockID.IsZero() &&
 			!bytes.Equal(vote.ValidatorAddress, myAddr) &&
-			bytes.Equal(cs.Validators.Proposer.Address, myAddr) &&
+			bytes.Equal(cs.state.NextValidators.Proposer.Address, myAddr) &&
 			len(vote.ExtensionSignature) > 0 &&
 			len(vote.Extension) > 0 {
 			// Skip the VerifyVoteExtension call if the vote was issued by this validator.
