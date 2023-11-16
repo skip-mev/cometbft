@@ -235,13 +235,8 @@ func loadFilePV(keyFilePath, stateFilePath string, loadState bool) *FilePV {
 // LoadOrGenFilePV loads a FilePV from the given filePaths
 // or else generates a new one and saves it to the filePaths.
 func LoadOrGenFilePV(keyFilePath, stateFilePath string) *FilePV {
-	var pv *FilePV
-	if cmtos.FileExists(keyFilePath) {
-		pv = LoadFilePV(keyFilePath, stateFilePath)
-	} else {
-		pv = GenFilePV(keyFilePath, stateFilePath)
-		pv.Save()
-	}
+	pv := GenFilePV(keyFilePath, stateFilePath)
+	pv.Save()
 	return pv
 }
 
