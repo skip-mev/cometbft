@@ -730,6 +730,10 @@ func (conR *Reactor) gossipDataForCatchup(logger log.Logger, rs *cstypes.RoundSt
 	time.Sleep(conR.conS.config.PeerGossipSleepDuration)
 }
 
+func (conR *Reactor) getNextValidators() *types.ValidatorSet {
+	return conR.conS.state.NextValidators
+}
+
 func (conR *Reactor) gossipVotesRoutine(peer p2p.Peer, ps *PeerState) {
 	logger := conR.Logger.With("peer", peer)
 
@@ -771,10 +775,12 @@ OUTER_LOOP:
 		// if the proposer is in our peerlist && proposer is the function peer, send the extensions
 		// if the proposer is in our peerlist && proposer is not function peer, do not send the extensions
 		// else if the proposer is not in our peerlist, send extensions to all
+
+		nextVals := conR.getNextValidators()
 		sendExtensions := true
-		proposerPeerID := p2p.PubKeyToID(rs.Validators.Proposer.PubKey)
+		proposerPeerID := p2p.PubKeyToID(nextVals.Proposer.PubKey)
 		if conR.Switch.Peers().Has(proposerPeerID) {
-			proposer := rs.Validators.Proposer.Address
+			proposer := nextVals.Proposer.Address
 			sendExtensions = bytes.Equal(consAddr, proposer)
 		}
 
