@@ -782,10 +782,12 @@ OUTER_LOOP:
 		if conR.Switch.Peers().Has(proposerPeerID) {
 			proposer := nextVals.Proposer.Address
 			sendExtensions = bytes.Equal(consAddr, proposer)
+			logger.Info("looking for peer", "proposer", proposerPeerID, "in", conR.Switch.Peers().List(), "send-extensions", sendExtensions)
 		}
 
-		// logger.Debug("gossipVotesRoutine", "rsHeight", rs.Height, "rsRound", rs.Round,
-		// "prsHeight", prs.Height, "prsRound", prs.Round, "prsStep", prs.Step)
+		logger.Debug("gossipVotesRoutine", "rsHeight", rs.Height, "rsRound", rs.Round,
+		"prsHeight", prs.Height, "prsRound", prs.Round, "prsStep", prs.Step)
+
 
 		// If height matches, then send LastCommit, Prevotes, Precommits.
 		if rs.Height == prs.Height {

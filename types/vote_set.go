@@ -214,7 +214,7 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 	}
 
 	// Check signature.
-	if voteSet.extensionsEnabled {
+	if voteSet.extensionsEnabled && len(vote.Extension) > 0 {
 		if err := vote.VerifyVoteAndExtension(voteSet.chainID, val.PubKey); err != nil {
 			return false, fmt.Errorf("failed to verify extended vote with ChainID %s and PubKey %s: %w", voteSet.chainID, val.PubKey, err)
 		}
