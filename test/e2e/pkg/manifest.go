@@ -56,10 +56,21 @@ type Manifest struct {
 	// testnet via the RPC endpoint of a random node. Default is 0
 	Evidence int `toml:"evidence"`
 
+	// VoteExtensionsEnableHeight configures the first height during which
+	// the chain will use and require vote extension data to be present
+	// in precommit messages.
+	VoteExtensionsEnableHeight int64 `toml:"vote_extensions_enable_height"`
+
 	// ABCIProtocol specifies the protocol used to communicate with the ABCI
-	// application: "unix", "tcp", "grpc", or "builtin". Defaults to builtin.
-	// builtin will build a complete CometBFT node into the application and
-	// launch it instead of launching a separate CometBFT process.
+	// application: "unix", "tcp", "grpc", "builtin" or "builtin_connsync".
+	//
+	// Defaults to "builtin". "builtin" will build a complete CometBFT node
+	// into the application and launch it instead of launching a separate
+	// CometBFT process.
+	//
+	// "builtin_connsync" is basically the same as "builtin", except that it
+	// uses a "connection-synchronized" local client creator, which attempts to
+	// replicate the same concurrency model locally as the socket client.
 	ABCIProtocol string `toml:"abci_protocol"`
 
 	// Add artificial delays to each of the main ABCI calls to mimic computation time
@@ -67,7 +78,8 @@ type Manifest struct {
 	PrepareProposalDelay time.Duration `toml:"prepare_proposal_delay"`
 	ProcessProposalDelay time.Duration `toml:"process_proposal_delay"`
 	CheckTxDelay         time.Duration `toml:"check_tx_delay"`
-	// TODO: add vote extension and finalize block delay (@cmwaters)
+	VoteExtensionDelay   time.Duration `toml:"vote_extension_delay"`
+	FinalizeBlockDelay   time.Duration `toml:"finalize_block_delay"`
 
 	// UpgradeVersion specifies to which version nodes need to upgrade.
 	// Currently only uncoordinated upgrade is supported
@@ -81,9 +93,11 @@ type Manifest struct {
 	// Defaults to false (disabled).
 	Prometheus bool `toml:"prometheus"`
 
-	// Maximum number of peers to which the node gossips transactions
-	ExperimentalMaxGossipConnectionsToPersistentPeers    uint `toml:"experimental_max_gossip_connections_to_persistent_peers"`
-	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint `toml:"experimental_max_gossip_connections_to_non_persistent_peers"`
+	// Defines a minimum size for the vote extensions.
+	VoteExtensionSize uint `toml:"vote_extension_size"`
+
+	// Upper bound of sleep duration then gossipping votes and block parts
+	PeerGossipIntraloopSleepDuration time.Duration `toml:"peer_gossip_intraloop_sleep_duration"`
 }
 
 // ManifestNode represents a node in a testnet manifest.
@@ -123,16 +137,9 @@ type ManifestNode struct {
 	// runner will wait for the network to reach at least this block height.
 	StartAt int64 `toml:"start_at"`
 
-	// BlockSync specifies the block sync mode: "" (disable), "v0" or "v2".
-	// Defaults to disabled.
-	//
-	// Note that BlockSync will always be enabled in the next major release and the
-	// `block_sync` key will be removed from the config file.
-	BlockSync string `toml:"block_sync"`
-
-	// Mempool specifies which version of mempool to use. Either "v0" or "v1"
-	// This defaults to v0.
-	Mempool string `toml:"mempool_version"`
+	// BlockSyncVersion specifies which version of Block Sync to use (currently
+	// only "v0", the default value).
+	BlockSyncVersion string `toml:"block_sync_version"`
 
 	// StateSync enables state sync. The runner automatically configures trusted
 	// block hashes and RPC servers. At least one node in the network must have
@@ -150,8 +157,8 @@ type ManifestNode struct {
 	SnapshotInterval uint64 `toml:"snapshot_interval"`
 
 	// RetainBlocks specifies the number of recent blocks to retain. Defaults to
-	// 0, which retains all blocks. Must be greater that PersistInterval and
-	// SnapshotInterval.
+	// 0, which retains all blocks. Must be greater that PersistInterval,
+	// SnapshotInterval and EvidenceAgeHeight.
 	RetainBlocks uint64 `toml:"retain_blocks"`
 
 	// Perturb lists perturbations to apply to the node after it has been
