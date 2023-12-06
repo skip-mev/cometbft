@@ -13,6 +13,7 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
 	"github.com/cometbft/cometbft/test/e2e/pkg/infra"
+	"github.com/cometbft/cometbft/test/e2e/pkg/infra/digitalocean"
 	"github.com/cometbft/cometbft/test/e2e/pkg/infra/docker"
 )
 
@@ -79,15 +80,29 @@ func NewCLI() *CLI {
 				return fmt.Errorf("unknown infrastructure type '%s'", inft)
 			}
 
-			testnet, err := e2e.LoadTestnet(m, file, ifd)
+			testnet, err := e2e.LoadTestnet(file, ifd)
 			if err != nil {
 				return fmt.Errorf("loading testnet: %s", err)
 			}
 
 			cli.testnet = testnet
-			cli.infp = &infra.NoopProvider{}
-			if inft == "docker" {
-				cli.infp = &docker.Provider{Testnet: testnet}
+			switch inft {
+			case "docker":
+				cli.infp = &docker.Provider{
+					ProviderData: infra.ProviderData{
+						Testnet: testnet,
+						InfrastructureData: ifd,
+					},
+				}
+			case "digital-ocean":
+				cli.infp = &digitalocean.Provider{
+					ProviderData: infra.ProviderData{
+						Testnet: testnet,
+						InfrastructureData: ifd,
+					},
+				}
+			default:
+				return fmt.Errorf("unknown infrastructure type '%s'", inft)
 			}
 			return nil
 		},

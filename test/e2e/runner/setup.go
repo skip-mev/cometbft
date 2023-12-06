@@ -169,8 +169,6 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	cfg.P2P.AddrBookStrict = false
 	cfg.DBBackend = node.Database
 	cfg.StateSync.DiscoveryTime = 5 * time.Second
-	cfg.Mempool.ExperimentalMaxGossipConnectionsToNonPersistentPeers = int(node.Testnet.ExperimentalMaxGossipConnectionsToNonPersistentPeers)
-	cfg.Mempool.ExperimentalMaxGossipConnectionsToPersistentPeers = int(node.Testnet.ExperimentalMaxGossipConnectionsToPersistentPeers)
 
 	switch node.ABCIProtocol {
 	case e2e.ProtocolUNIX:
@@ -216,14 +214,11 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	default:
 		return nil, fmt.Errorf("unexpected mode %q", node.Mode)
 	}
-	if node.Mempool != "" {
-		cfg.Mempool.Version = node.Mempool
-	}
 
-	if node.BlockSync == "" {
+	if node.BlockSyncVersion == "" {
 		cfg.BlockSyncMode = false
 	} else {
-		cfg.BlockSync.Version = node.BlockSync
+		cfg.BlockSync.Version = node.BlockSyncVersion
 	}
 
 	if node.StateSync {
