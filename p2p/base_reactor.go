@@ -1,9 +1,20 @@
 package p2p
 
 import (
+	"fmt"
+
 	"github.com/cometbft/cometbft/libs/service"
 	"github.com/cometbft/cometbft/p2p/conn"
 )
+
+type AppHashError struct {
+	Err    error
+	Height uint64
+}
+
+func (e AppHashError) Error() string {
+	return fmt.Sprintf("app hash error at height %v: %s", e.Height, e.Err.Error())
+}
 
 // Reactor is responsible for handling incoming messages on one or more
 // Channel. Switch calls GetChannels when reactor is added to it. When a new
@@ -41,6 +52,8 @@ type Reactor interface {
 	// ReceiveEnvelope is called by the switch when an envelope is received from any connected
 	// peer on any of the channels registered by the reactor.
 	ReceiveEnvelope(Envelope)
+
+	AppHashErrorsCh() <-chan AppHashError
 }
 
 //--------------------------------------
@@ -66,3 +79,4 @@ func (*BaseReactor) AddPeer(peer Peer)                        {}
 func (*BaseReactor) RemovePeer(peer Peer, reason interface{}) {}
 func (*BaseReactor) ReceiveEnvelope(e Envelope)               {}
 func (*BaseReactor) InitPeer(peer Peer) Peer                  { return peer }
+func (*BaseReactor) AppHashErrorsCh() <-chan AppHashError     { return nil }
