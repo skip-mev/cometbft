@@ -433,6 +433,6 @@ func (bcR *Reactor) BroadcastStatusRequest() {
 	})
 }
 
-func (r *Reactor) AppHashErrorsCh() chan p2p.AppHashError {
-	return r.appHashErrorsCh
+func (bcR *Reactor) AppHashErrorsCh() chan p2p.AppHashError {
+	return bcR.appHashErrorsCh
 }
