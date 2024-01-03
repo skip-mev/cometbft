@@ -53,7 +53,9 @@ type Reactor interface {
 	// peer on any of the channels registered by the reactor.
 	ReceiveEnvelope(Envelope)
 
-	AppHashErrorsCh() <-chan AppHashError
+	// AppHashErrorsCh is used to stream hash errors to the sdk, which is then used
+	// to provide further debugging information in logs to the user.
+	AppHashErrorsCh() chan AppHashError
 }
 
 //--------------------------------------
@@ -61,12 +63,14 @@ type Reactor interface {
 type BaseReactor struct {
 	service.BaseService // Provides Start, Stop, .Quit
 	Switch              *Switch
+	AppHashErrorChanBR  chan AppHashError
 }
 
 func NewBaseReactor(name string, impl Reactor) *BaseReactor {
 	return &BaseReactor{
-		BaseService: *service.NewBaseService(nil, name, impl),
-		Switch:      nil,
+		BaseService:        *service.NewBaseService(nil, name, impl),
+		Switch:             nil,
+		AppHashErrorChanBR: impl.AppHashErrorsCh(),
 	}
 }
 
@@ -79,4 +83,4 @@ func (*BaseReactor) AddPeer(peer Peer)                        {}
 func (*BaseReactor) RemovePeer(peer Peer, reason interface{}) {}
 func (*BaseReactor) ReceiveEnvelope(e Envelope)               {}
 func (*BaseReactor) InitPeer(peer Peer) Peer                  { return peer }
-func (*BaseReactor) AppHashErrorsCh() <-chan AppHashError     { return nil }
+func (*BaseReactor) AppHashErrorsCh() chan AppHashError       { return nil }

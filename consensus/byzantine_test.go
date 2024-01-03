@@ -605,4 +605,4 @@ func (br *ByzantineReactor) ReceiveEnvelope(e p2p.Envelope) {
 
 func (br *ByzantineReactor) InitPeer(peer p2p.Peer) p2p.Peer { return peer }
 
-func (br *ByzantineReactor) AppHashErrorsCh() <-chan p2p.AppHashError { return nil }
+func (br *ByzantineReactor) AppHashErrorsCh() chan p2p.AppHashError { return nil }

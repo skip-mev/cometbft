@@ -282,6 +282,6 @@ func (m *TxsMessage) String() string {
 	return fmt.Sprintf("[TxsMessage %v]", m.Txs)
 }
 
-func (memR *Reactor) AppHashErrorsCh() <-chan p2p.AppHashError {
+func (memR *Reactor) AppHashErrorsCh() chan p2p.AppHashError {
 	return memR.appHashErrorsCh
 }
