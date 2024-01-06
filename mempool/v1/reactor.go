@@ -21,9 +21,10 @@ import (
 // peers you received it from.
 type Reactor struct {
 	p2p.BaseReactor
-	config  *cfg.MempoolConfig
-	mempool *TxMempool
-	ids     *mempoolIDs
+	config          *cfg.MempoolConfig
+	mempool         *TxMempool
+	ids             *mempoolIDs
+	appHashErrorsCh chan p2p.AppHashError
 }
 
 type mempoolIDs struct {
@@ -279,4 +280,8 @@ type TxsMessage struct {
 // String returns a string representation of the TxsMessage.
 func (m *TxsMessage) String() string {
 	return fmt.Sprintf("[TxsMessage %v]", m.Txs)
+}
+
+func (memR *Reactor) AppHashErrorsCh() chan p2p.AppHashError {
+	return memR.appHashErrorsCh
 }
