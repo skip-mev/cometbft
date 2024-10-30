@@ -77,9 +77,16 @@ func NewReactor(consensusState *State, waitSync bool, options ...ReactorOption) 
 	return conR
 }
 
+func (conR *Reactor) GetLastHeight() int64 {
+	return conR.conS.GetLastHeight()
+}
+
 // OnStart implements BaseService by subscribing to events, which later will be
-// broadcasted to other peers and starting state if we're not in block sync.
+// broadcasted to other peers and starting state `if we're not in block sync.
 func (conR *Reactor) OnStart() error {
+	conR.Logger.Info("conR OnStart")
+	conR.Logger.Error("conR OnStart ErrorVersion")
+
 	if conR.WaitSync() {
 		conR.Logger.Info("Starting reactor in sync mode: consensus protocols will start once sync completes")
 	}
@@ -334,6 +341,9 @@ func (conR *Reactor) Receive(e p2p.Envelope) {
 		switch msg := msg.(type) {
 		case *ProposalMessage:
 			ps.SetHasProposal(msg.Proposal)
+			if msg.Proposal.Height >= conR.conS.Height+2 {
+				conR.Logger.Error("We're behind!", "proposal", msg.Proposal, "height", conR.conS.Height)
+			}
 			conR.conS.peerMsgQueue <- msgInfo{msg, e.Src.ID(), cmttime.Now()}
 		case *ProposalPOLMessage:
 			ps.ApplyProposalPOLMessage(msg)
@@ -357,6 +367,9 @@ func (conR *Reactor) Receive(e p2p.Envelope) {
 			conR.rsMtx.RLock()
 			height, valSize, lastCommitSize := conR.rs.Height, conR.rs.Validators.Size(), conR.rs.LastCommit.Size()
 			conR.rsMtx.RUnlock()
+			if msg.Vote.Height >= height+2 {
+				conR.Logger.Error("We're behind!")
+			}
 			ps.SetHasVoteFromPeer(msg.Vote, height, valSize, lastCommitSize)
 
 			cs.peerMsgQueue <- msgInfo{msg, e.Src.ID(), time.Time{}}

@@ -37,6 +37,7 @@ type consensusReactor interface {
 	// for when we switch from blocksync reactor and block sync to
 	// the consensus machine
 	SwitchToConsensus(state sm.State, skipWAL bool)
+	GetLastHeight() int64
 }
 
 type mempoolReactor interface {
@@ -73,6 +74,8 @@ type Reactor struct {
 	switchToConsensusMs int
 
 	metrics *Metrics
+
+	switchedToConsensus bool
 }
 
 // NewReactor returns new reactor instance.
@@ -299,7 +302,13 @@ func (bcR *Reactor) Receive(e p2p.Envelope) {
 		})
 	case *bcproto.StatusResponse:
 		// Got a peer status. Unverified.
-		bcR.pool.SetPeerRange(e.Src.ID(), msg.Base, msg.Height)
+		if !bcR.switchedToConsensus {
+			bcR.pool.SetPeerRange(e.Src.ID(), msg.Base, msg.Height)
+		} else {
+			if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok {
+				fmt.Println("conR.GetLastHeight()", conR.GetLastHeight(), "msg.Height", msg.Height)
+			}
+		}
 	case *bcproto.NoBlockResponse:
 		bcR.Logger.Debug("Peer does not have requested block", "peer", e.Src, "height", msg.Height)
 		bcR.pool.RedoRequestFrom(msg.Height, e.Src.ID())
@@ -331,7 +340,7 @@ func (bcR *Reactor) poolRoutine(stateSynced bool) {
 	defer switchToConsensusTicker.Stop()
 
 	trySyncTicker := time.NewTicker(trySyncIntervalMS * time.Millisecond)
-	defer trySyncTicker.Stop()
+	// defer trySyncTicker.Stop()
 
 	initialCommitHasExtensions := (bcR.initialState.LastBlockHeight > 0 && bcR.store.LoadBlockExtendedCommit(bcR.initialState.LastBlockHeight) != nil)
 
@@ -349,8 +358,23 @@ FOR_LOOP:
 				}
 			}
 
-			if bcR.isCaughtUp(state, blocksSynced, stateSynced) {
-				break FOR_LOOP
+			if bcR.switchedToConsensus {
+				bcR.Switch.Peers().ForEach(func(peer p2p.Peer) {
+					peer.TrySend(p2p.Envelope{
+						ChannelID: BlocksyncChannel,
+						Message:   &bcproto.StatusRequest{},
+					})
+				})
+				// isCaughtUp, height, maxPeerHeight := bcR.pool.IsCaughtUp()
+				// bcR.Logger.Info("isCaughtUp", "isCaughtUp", isCaughtUp, "height", height, "maxPeerHeight", maxPeerHeight)
+				continue FOR_LOOP
+			} else {
+				if bcR.isCaughtUp(state, blocksSynced, stateSynced) {
+					bcR.Logger.Info("Switching to consensus mode")
+					trySyncTicker.Stop()
+					bcR.switchedToConsensus = true
+					continue FOR_LOOP
+				}
 			}
 
 		case <-trySyncTicker.C: // chan time
@@ -512,9 +536,9 @@ func (bcR *Reactor) isMissingExtension(state sm.State, blocksSynced uint64) bool
 func (bcR *Reactor) isCaughtUp(state sm.State, blocksSynced uint64, stateSynced bool) bool {
 	if isCaughtUp, height, _ := bcR.pool.IsCaughtUp(); isCaughtUp || state.Validators.ValidatorBlocksTheChain(bcR.localAddr) {
 		bcR.Logger.Info("Time to switch to consensus mode!", "height", height)
-		if err := bcR.pool.Stop(); err != nil {
-			bcR.Logger.Error("Error stopping pool", "err", err)
-		}
+		// if err := bcR.pool.Stop(); err != nil {
+		// 	bcR.Logger.Error("Error stopping pool", "err", err)
+		// }
 		if memR, ok := bcR.Switch.Reactor("MEMPOOL").(mempoolReactor); ok {
 			memR.EnableInOutTxs()
 		}
