@@ -38,7 +38,9 @@ type consensusReactor interface {
 	// the consensus machine
 	SwitchToConsensus(state sm.State, skipWAL bool)
 	GetLastHeight() int64
+	GetState() sm.State
 	OnStop()
+	Resume()
 }
 
 type mempoolReactor interface {
@@ -77,6 +79,7 @@ type Reactor struct {
 	metrics *Metrics
 
 	switchedToConsensus    bool
+	startedConsensus       bool
 	rebootConsensus        chan struct{}
 	switchToConsensusMutex sync.Mutex
 }
@@ -310,9 +313,13 @@ func (bcR *Reactor) Receive(e p2p.Envelope) {
 			bcR.pool.SetPeerRange(e.Src.ID(), msg.Base, msg.Height)
 		} else {
 			if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok {
+				// TODO(wllmshao): this probably shouldn't be a locking thing. need to prevent this from going back and forth btwn consensus and blocksync too frequently
+				bcR.switchToConsensusMutex.Lock()
+				// TODO(wllmshao): blocksync isn't committing to consensus state so this isn't updating correctly even though blocksync is working.
+				// need to do something similar to SwitchToConsensus where we pass the new info to consensus so it can update itself and then resume.
+				// Put this in Resume()?
 				lastHeight := conR.GetLastHeight()
 				fmt.Println("conR.GetLastHeight()", lastHeight, "msg.Height", msg.Height)
-				bcR.switchToConsensusMutex.Lock()
 				if lastHeight < msg.Height-3 && bcR.switchedToConsensus {
 					bcR.Logger.Info("Switching back to blocksync mode")
 
@@ -403,12 +410,16 @@ FOR_LOOP:
 					bcR.Logger.Info("Switching to consensus mode")
 					trySyncTicker.Stop()
 					bcR.switchedToConsensus = true
+					bcR.Switch.Reactor("CONSENSUS").(consensusReactor).Resume()
 					continue FOR_LOOP
 				}
 			}
 
 		case <-bcR.rebootConsensus:
 			fmt.Println("received rebootConsensus")
+			state = bcR.Switch.Reactor("CONSENSUS").(consensusReactor).GetState()
+			blocksSynced = 0
+			lastHundred = time.Now()
 			trySyncTicker = time.NewTicker(trySyncIntervalMS * time.Millisecond)
 
 		case <-trySyncTicker.C: // chan time
@@ -576,11 +587,12 @@ func (bcR *Reactor) isCaughtUp(state sm.State, blocksSynced uint64, stateSynced 
 		// if err := bcR.pool.Stop(); err != nil {
 		// 	bcR.Logger.Error("Error stopping pool", "err", err)
 		// }
-		if memR, ok := bcR.Switch.Reactor("MEMPOOL").(mempoolReactor); ok && !bcR.switchedToConsensus {
+		if memR, ok := bcR.Switch.Reactor("MEMPOOL").(mempoolReactor); ok && !bcR.startedConsensus {
 			memR.EnableInOutTxs()
 		}
-		if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok && !bcR.switchedToConsensus {
+		if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok && !bcR.startedConsensus {
 			conR.SwitchToConsensus(state, blocksSynced > 0 || stateSynced)
+			bcR.startedConsensus = true
 		}
 		// else {
 		// should only happen during testing

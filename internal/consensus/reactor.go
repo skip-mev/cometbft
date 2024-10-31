@@ -81,6 +81,10 @@ func (conR *Reactor) GetLastHeight() int64 {
 	return conR.conS.GetLastHeight()
 }
 
+func (conR *Reactor) GetState() sm.State {
+	return conR.conS.GetState()
+}
+
 // OnStart implements BaseService by subscribing to events, which later will be
 // broadcasted to other peers and starting state `if we're not in block sync.
 func (conR *Reactor) OnStart() error {
@@ -117,6 +121,11 @@ func (conR *Reactor) OnStop() {
 	if !conR.WaitSync() {
 		conR.conS.Wait()
 	}
+}
+
+func (conR *Reactor) Resume() {
+	conR.subscribeToBroadcastEvents()
+	conR.conS.Start()
 }
 
 // SwitchToConsensus switches from block sync or state sync mode to consensus
