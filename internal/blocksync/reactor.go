@@ -78,10 +78,11 @@ type Reactor struct {
 
 	metrics *Metrics
 
-	switchedToConsensus    bool
-	startedConsensus       bool
-	rebootConsensus        chan struct{}
-	switchToConsensusMutex sync.Mutex
+	switchedToConsensus              bool
+	startedConsensus                 bool
+	rebootBlocksync                  chan struct{}
+	switchToConsensusMutex           sync.Mutex
+	hasSwitchedBackToBlockSyncBefore bool
 }
 
 // NewReactor returns new reactor instance.
@@ -126,7 +127,7 @@ func NewReactor(state sm.State, blockExec *sm.BlockExecutor, store *store.BlockS
 		requestsCh:      requestsCh,
 		errorsCh:        errorsCh,
 		metrics:         metrics,
-		rebootConsensus: make(chan struct{}),
+		rebootBlocksync: make(chan struct{}),
 	}
 	bcR.BaseReactor = *p2p.NewBaseReactor("Reactor", bcR)
 	return bcR
@@ -320,8 +321,13 @@ func (bcR *Reactor) Receive(e p2p.Envelope) {
 				// Put this in Resume()?
 				lastHeight := conR.GetLastHeight()
 				fmt.Println("conR.GetLastHeight()", lastHeight, "msg.Height", msg.Height)
-				if lastHeight < msg.Height-3 && bcR.switchedToConsensus {
+				if lastHeight < msg.Height-10 && bcR.switchedToConsensus && !bcR.hasSwitchedBackToBlockSyncBefore {
 					bcR.Logger.Info("Switching back to blocksync mode")
+					// TODO(wllmshao): this exists for now because it's hard to prevent this from going back and forth between consensus and blocksync
+					// in particular, by the time we catch up by blocksync to the height we think we're supposed to get to, the condition to switch back is already met
+					// as the chain consensus has advanced by more than 10.
+					// we may need some way to dynamically adjust this threshold based on block times.
+					bcR.hasSwitchedBackToBlockSyncBefore = true
 
 					// stop consensus reactor
 					conR.OnStop()
@@ -337,9 +343,9 @@ func (bcR *Reactor) Receive(e p2p.Envelope) {
 					bcR.errorsCh = errorsCh
 
 					bcR.switchedToConsensus = false
-					fmt.Println("sending rebootConsensus")
-					bcR.rebootConsensus <- struct{}{}
-					fmt.Println("sent rebootConsensus")
+					fmt.Println("sending rebootBlocksync")
+					bcR.rebootBlocksync <- struct{}{}
+					fmt.Println("sent rebootBlocksync")
 					bcR.pool.Start()
 					fmt.Println("pool started")
 				}
@@ -396,12 +402,18 @@ FOR_LOOP:
 			}
 
 			if bcR.switchedToConsensus {
-				bcR.Switch.Peers().ForEach(func(peer p2p.Peer) {
-					peer.TrySend(p2p.Envelope{
+				// bcR.Switch.Peers().ForEach(func(peer p2p.Peer) {
+				// 	peer.TrySend(p2p.Envelope{
+				// 		ChannelID: BlocksyncChannel,
+				// 		Message:   &bcproto.StatusRequest{},
+				// 	})
+				// })
+				if !bcR.hasSwitchedBackToBlockSyncBefore {
+					bcR.Switch.Peers().Random().TrySend(p2p.Envelope{
 						ChannelID: BlocksyncChannel,
 						Message:   &bcproto.StatusRequest{},
 					})
-				})
+				}
 				// isCaughtUp, height, maxPeerHeight := bcR.pool.IsCaughtUp()
 				// bcR.Logger.Info("isCaughtUp", "isCaughtUp", isCaughtUp, "height", height, "maxPeerHeight", maxPeerHeight)
 				continue FOR_LOOP
@@ -418,8 +430,8 @@ FOR_LOOP:
 				}
 			}
 
-		case <-bcR.rebootConsensus:
-			fmt.Println("received rebootConsensus")
+		case <-bcR.rebootBlocksync:
+			fmt.Println("received rebootBlocksync")
 			state = bcR.Switch.Reactor("CONSENSUS").(consensusReactor).GetState()
 			blocksSynced = 0
 			lastHundred = time.Now()

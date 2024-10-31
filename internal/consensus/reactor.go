@@ -115,17 +115,13 @@ func (conR *Reactor) OnStart() error {
 // state.
 func (conR *Reactor) OnStop() {
 	conR.unsubscribeFromBroadcastEvents()
-	if err := conR.conS.Stop(); err != nil {
-		conR.Logger.Error("Error stopping consensus state", "err", err)
-	}
-	if !conR.WaitSync() {
-		conR.conS.Wait()
-	}
+	conR.conS.OnStop()
+	//	if !conR.WaitSync() {
+	//		conR.conS.Wait()
+	//	}
 }
 
 func (conR *Reactor) Resume(state sm.State) {
-	conR.subscribeToBroadcastEvents()
-
 	// reset the state
 	func() {
 		// We need to lock, as we are not entering consensus state from State's `handleMsg` or `handleTimeout`
@@ -145,12 +141,9 @@ func (conR *Reactor) Resume(state sm.State) {
 	conR.waitSync.Store(false)
 	conR.conS.doWALCatchup = false
 
-	// TODO(wllmshao): I think this is panicking because the ticker or evsw is already started.
-	// Probably should write a conS.Resume function.
-	err := conR.conS.Start()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to resume consensus: %v", err))
-	}
+	conR.conS.Resume()
+
+	conR.subscribeToBroadcastEvents()
 }
 
 // SwitchToConsensus switches from block sync or state sync mode to consensus

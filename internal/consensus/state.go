@@ -141,6 +141,10 @@ type State struct {
 	// a buffer to store the concatenated proposal block parts (serialization format)
 	// should only be accessed under the cs.mtx lock
 	serializedBlockBuffer []byte
+
+	consensusQuit bool
+	resumeChan    chan struct{}
+	stopChan      chan struct{}
 }
 
 // StateOption sets an optional parameter on the State.
@@ -171,6 +175,8 @@ func NewState(
 		evpool:           evpool,
 		evsw:             cmtevents.NewEventSwitch(),
 		metrics:          NopMetrics(),
+		resumeChan:       make(chan struct{}),
+		stopChan:         make(chan struct{}),
 	}
 	for _, option := range options {
 		option(cs)
@@ -317,6 +323,21 @@ func (cs *State) LoadCommit(height int64) *types.Commit {
 	return cs.blockStore.LoadBlockCommit(height)
 }
 
+func (cs *State) Resume() {
+	cs.timeoutTicker = NewTimeoutTicker()
+	cs.evsw = cmtevents.NewEventSwitch()
+
+	cs.timeoutTicker.Start()
+	cs.evsw.Start()
+
+	select {
+	case cs.resumeChan <- struct{}{}:
+	default:
+	}
+
+	cs.scheduleRound0(cs.GetRoundState())
+}
+
 // OnStart loads the latest state via the WAL, and starts the timeout and
 // receive routines.
 func (cs *State) OnStart() error {
@@ -443,6 +464,7 @@ func (cs *State) OnStop() {
 	if err := cs.timeoutTicker.Stop(); err != nil {
 		cs.Logger.Error("Failed trying to stop timeoutTicket", "error", err)
 	}
+	cs.stopChan <- struct{}{}
 	// WAL is stopped in receiveRoutine.
 }
 
@@ -836,9 +858,15 @@ func (cs *State) receiveRoutine(maxSteps int) {
 
 		select {
 		case <-cs.txNotifier.TxsAvailable():
+			if cs.consensusQuit {
+				continue
+			}
 			cs.handleTxsAvailable()
 
 		case mi = <-cs.peerMsgQueue:
+			if cs.consensusQuit {
+				continue
+			}
 			if err := cs.wal.Write(mi); err != nil {
 				cs.Logger.Error("Failed writing to WAL", "err", err)
 			}
@@ -847,6 +875,9 @@ func (cs *State) receiveRoutine(maxSteps int) {
 			cs.handleMsg(mi)
 
 		case mi = <-cs.internalMsgQueue:
+			if cs.consensusQuit {
+				continue
+			}
 			err := cs.wal.WriteSync(mi) // NOTE: fsync
 			if err != nil {
 				panic(fmt.Sprintf(
@@ -867,6 +898,9 @@ func (cs *State) receiveRoutine(maxSteps int) {
 			cs.handleMsg(mi)
 
 		case ti := <-cs.timeoutTicker.Chan(): // tockChan:
+			if cs.consensusQuit {
+				continue
+			}
 			if err := cs.wal.Write(ti); err != nil {
 				cs.Logger.Error("failed writing to WAL", "err", err)
 			}
@@ -875,9 +909,17 @@ func (cs *State) receiveRoutine(maxSteps int) {
 			// go to the next step
 			cs.handleTimeout(ti, rs)
 
-		case <-cs.Quit():
-			onExit(cs)
-			return
+		// case <-cs.Quit():
+		// onExit(cs)
+		// return
+
+		case <-cs.stopChan:
+			fmt.Println("CONSENSUS STOP")
+			cs.consensusQuit = true
+
+		case <-cs.resumeChan:
+			fmt.Println("CONSENSUS RESUME")
+			cs.consensusQuit = false
 		}
 	}
 }
