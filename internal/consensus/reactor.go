@@ -123,9 +123,34 @@ func (conR *Reactor) OnStop() {
 	}
 }
 
-func (conR *Reactor) Resume() {
+func (conR *Reactor) Resume(state sm.State) {
 	conR.subscribeToBroadcastEvents()
-	conR.conS.Start()
+
+	// reset the state
+	func() {
+		// We need to lock, as we are not entering consensus state from State's `handleMsg` or `handleTimeout`
+		conR.conS.mtx.Lock()
+		defer conR.conS.mtx.Unlock()
+		// We have no votes, so reconstruct LastCommit from SeenCommit
+		if state.LastBlockHeight > 0 {
+			conR.conS.reconstructLastCommit(state)
+		}
+
+		// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
+		// NewRoundStepMessage.
+		conR.conS.updateToState(state)
+	}()
+
+	// stop waiting for syncing to finish
+	conR.waitSync.Store(false)
+	conR.conS.doWALCatchup = false
+
+	// TODO(wllmshao): I think this is panicking because the ticker or evsw is already started.
+	// Probably should write a conS.Resume function.
+	err := conR.conS.Start()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to resume consensus: %v", err))
+	}
 }
 
 // SwitchToConsensus switches from block sync or state sync mode to consensus

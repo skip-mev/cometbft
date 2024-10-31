@@ -40,7 +40,7 @@ type consensusReactor interface {
 	GetLastHeight() int64
 	GetState() sm.State
 	OnStop()
-	Resume()
+	Resume(state sm.State)
 }
 
 type mempoolReactor interface {
@@ -410,7 +410,10 @@ FOR_LOOP:
 					bcR.Logger.Info("Switching to consensus mode")
 					trySyncTicker.Stop()
 					bcR.switchedToConsensus = true
-					bcR.Switch.Reactor("CONSENSUS").(consensusReactor).Resume()
+					if bcR.startedConsensus {
+						bcR.Switch.Reactor("CONSENSUS").(consensusReactor).Resume(state)
+					}
+					bcR.startedConsensus = true
 					continue FOR_LOOP
 				}
 			}
@@ -592,7 +595,6 @@ func (bcR *Reactor) isCaughtUp(state sm.State, blocksSynced uint64, stateSynced 
 		}
 		if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok && !bcR.startedConsensus {
 			conR.SwitchToConsensus(state, blocksSynced > 0 || stateSynced)
-			bcR.startedConsensus = true
 		}
 		// else {
 		// should only happen during testing
