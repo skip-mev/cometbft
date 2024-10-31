@@ -38,6 +38,7 @@ type consensusReactor interface {
 	// the consensus machine
 	SwitchToConsensus(state sm.State, skipWAL bool)
 	GetLastHeight() int64
+	OnStop()
 }
 
 type mempoolReactor interface {
@@ -75,7 +76,9 @@ type Reactor struct {
 
 	metrics *Metrics
 
-	switchedToConsensus bool
+	switchedToConsensus    bool
+	rebootConsensus        chan struct{}
+	switchToConsensusMutex sync.Mutex
 }
 
 // NewReactor returns new reactor instance.
@@ -111,15 +114,16 @@ func NewReactor(state sm.State, blockExec *sm.BlockExecutor, store *store.BlockS
 	pool := NewBlockPool(startHeight, requestsCh, errorsCh)
 
 	bcR := &Reactor{
-		initialState: state,
-		blockExec:    blockExec,
-		store:        store,
-		pool:         pool,
-		blockSync:    blockSync,
-		localAddr:    localAddr,
-		requestsCh:   requestsCh,
-		errorsCh:     errorsCh,
-		metrics:      metrics,
+		initialState:    state,
+		blockExec:       blockExec,
+		store:           store,
+		pool:            pool,
+		blockSync:       blockSync,
+		localAddr:       localAddr,
+		requestsCh:      requestsCh,
+		errorsCh:        errorsCh,
+		metrics:         metrics,
+		rebootConsensus: make(chan struct{}),
 	}
 	bcR.BaseReactor = *p2p.NewBaseReactor("Reactor", bcR)
 	return bcR
@@ -306,7 +310,33 @@ func (bcR *Reactor) Receive(e p2p.Envelope) {
 			bcR.pool.SetPeerRange(e.Src.ID(), msg.Base, msg.Height)
 		} else {
 			if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok {
-				fmt.Println("conR.GetLastHeight()", conR.GetLastHeight(), "msg.Height", msg.Height)
+				lastHeight := conR.GetLastHeight()
+				fmt.Println("conR.GetLastHeight()", lastHeight, "msg.Height", msg.Height)
+				bcR.switchToConsensusMutex.Lock()
+				if lastHeight < msg.Height-3 && bcR.switchedToConsensus {
+					bcR.Logger.Info("Switching back to blocksync mode")
+
+					// stop consensus reactor
+					conR.OnStop()
+
+					// reset the pool
+					// TODO(wllmshao): some kind of deadlock here? use prints to check
+					requestsCh := make(chan BlockRequest)
+					const capacity = 1000                      // must be bigger than peers count
+					errorsCh := make(chan peerError, capacity) // so we don't block in #Receive#pool.AddBlock
+					fmt.Println("making new pool", bcR.store.Height()+1)
+					bcR.pool = NewBlockPool(bcR.store.Height()+1, requestsCh, errorsCh)
+					bcR.requestsCh = requestsCh
+					bcR.errorsCh = errorsCh
+
+					bcR.switchedToConsensus = false
+					fmt.Println("sending rebootConsensus")
+					bcR.rebootConsensus <- struct{}{}
+					fmt.Println("sent rebootConsensus")
+					bcR.pool.Start()
+					fmt.Println("pool started")
+				}
+				bcR.switchToConsensusMutex.Unlock()
 			}
 		}
 	case *bcproto.NoBlockResponse:
@@ -377,6 +407,10 @@ FOR_LOOP:
 				}
 			}
 
+		case <-bcR.rebootConsensus:
+			fmt.Println("received rebootConsensus")
+			trySyncTicker = time.NewTicker(trySyncIntervalMS * time.Millisecond)
+
 		case <-trySyncTicker.C: // chan time
 			select {
 			case didProcessCh <- struct{}{}:
@@ -417,7 +451,10 @@ FOR_LOOP:
 				break FOR_LOOP
 			}
 			// Try again quickly next loop.
-			didProcessCh <- struct{}{}
+			select {
+			case didProcessCh <- struct{}{}:
+			default:
+			}
 
 			firstParts, err := first.MakePartSet(types.BlockPartSizeBytes)
 			if err != nil {
@@ -539,10 +576,10 @@ func (bcR *Reactor) isCaughtUp(state sm.State, blocksSynced uint64, stateSynced 
 		// if err := bcR.pool.Stop(); err != nil {
 		// 	bcR.Logger.Error("Error stopping pool", "err", err)
 		// }
-		if memR, ok := bcR.Switch.Reactor("MEMPOOL").(mempoolReactor); ok {
+		if memR, ok := bcR.Switch.Reactor("MEMPOOL").(mempoolReactor); ok && !bcR.switchedToConsensus {
 			memR.EnableInOutTxs()
 		}
-		if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok {
+		if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok && !bcR.switchedToConsensus {
 			conR.SwitchToConsensus(state, blocksSynced > 0 || stateSynced)
 		}
 		// else {
