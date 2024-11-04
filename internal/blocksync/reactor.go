@@ -316,9 +316,6 @@ func (bcR *Reactor) Receive(e p2p.Envelope) {
 			if conR, ok := bcR.Switch.Reactor("CONSENSUS").(consensusReactor); ok {
 				// TODO(wllmshao): this probably shouldn't be a locking thing. need to prevent this from going back and forth btwn consensus and blocksync too frequently
 				bcR.switchToConsensusMutex.Lock()
-				// TODO(wllmshao): blocksync isn't committing to consensus state so this isn't updating correctly even though blocksync is working.
-				// need to do something similar to SwitchToConsensus where we pass the new info to consensus so it can update itself and then resume.
-				// Put this in Resume()?
 				lastHeight := conR.GetLastHeight()
 				fmt.Println("conR.GetLastHeight()", lastHeight, "msg.Height", msg.Height)
 				if lastHeight < msg.Height-10 && bcR.switchedToConsensus && !bcR.hasSwitchedBackToBlockSyncBefore {
@@ -333,7 +330,6 @@ func (bcR *Reactor) Receive(e p2p.Envelope) {
 					conR.OnStop()
 
 					// reset the pool
-					// TODO(wllmshao): some kind of deadlock here? use prints to check
 					requestsCh := make(chan BlockRequest)
 					const capacity = 1000                      // must be bigger than peers count
 					errorsCh := make(chan peerError, capacity) // so we don't block in #Receive#pool.AddBlock
