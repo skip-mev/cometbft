@@ -30,6 +30,7 @@ import (
 	"github.com/cometbft/cometbft/light"
 	mempl "github.com/cometbft/cometbft/mempool"
 	"github.com/cometbft/cometbft/p2p"
+	"github.com/cometbft/cometbft/p2p/complete"
 	na "github.com/cometbft/cometbft/p2p/netaddr"
 	ni "github.com/cometbft/cometbft/p2p/nodeinfo"
 	"github.com/cometbft/cometbft/p2p/nodekey"
@@ -542,6 +543,10 @@ func NewNodeWithCliParams(ctx context.Context,
 	if config.P2P.PexReactor {
 		pexReactor = createPEXReactorAndAddToSwitch(addrBook, config, sw, logger)
 	}
+
+	completePeeringReactor := complete.NewCompletePeeringReactor(sw)
+	completePeeringReactor.SetLogger(logger.With("module", "complete_peering"))
+	sw.AddReactor("COMPLETEPEERING", completePeeringReactor)
 
 	// Add private IDs to addrbook to block those peers being added
 	addrBook.AddPrivateIDs(splitAndTrimEmpty(config.P2P.PrivatePeerIDs, ",", " "))
@@ -1118,6 +1123,8 @@ func makeNodeInfo(
 	if config.P2P.PexReactor {
 		nodeInfo.Channels = append(nodeInfo.Channels, pex.PexChannel)
 	}
+
+	nodeInfo.Channels = append(nodeInfo.Channels, complete.PeeringChannel)
 
 	lAddr := config.P2P.ExternalAddress
 
