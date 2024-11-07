@@ -246,6 +246,21 @@ func (sw *Switch) OnStart() error {
 	// Start accepting Peers.
 	go sw.acceptRoutine()
 
+	// Peer monitoring logging
+	go func() {
+		for {
+			if !sw.IsRunning() {
+				return
+			}
+			outbound, inbound, dialing := sw.NumPeers()
+			sw.Logger.Info("Peer status",
+				"outbound", outbound,
+				"inbound", inbound,
+				"dialing", dialing)
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
 	return nil
 }
 

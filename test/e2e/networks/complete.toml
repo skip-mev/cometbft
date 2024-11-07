@@ -1,3 +1,5 @@
+disable_pex = true
+
 [validators]
 validator01 = 1
 validator02 = 1
@@ -7,17 +9,13 @@ validator04 = 1
 [node]
   [node.validator01]
     mode = "validator"
-    disable_pex = true
   [node.validator02]
     mode = "validator"
     persistent_peers = ["validator01"]
-    disable_pex = true
   [node.validator03]
     mode = "validator"
     persistent_peers = ["validator01"]
-    disable_pex = true
   [node.validator04]
     mode = "validator"
     persistent_peers = ["validator01"]
     perturb = ["disconnect"]
-    disable_pex = true
