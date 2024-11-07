@@ -30,6 +30,7 @@ message DefaultNodeInfo {
   bytes                channels         = 6;
   string               moniker          = 7;
   DefaultNodeInfoOther other            = 8 [(gogoproto.nullable) = false];
+  bool                 is_validator     = 9;
 }
 
 // DefaultNodeInfoOther is the misc. application specific data.

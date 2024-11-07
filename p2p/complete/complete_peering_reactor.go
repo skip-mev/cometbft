@@ -4,6 +4,7 @@ import (
 	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
 	"github.com/cometbft/cometbft/p2p"
 	na "github.com/cometbft/cometbft/p2p/netaddr"
+	"github.com/cometbft/cometbft/p2p/nodeinfo"
 	tcpconn "github.com/cometbft/cometbft/p2p/transport/tcp/conn"
 )
 
@@ -65,6 +66,10 @@ func (r *CompletePeeringReactor) OnStop() {}
 // AddPeer implements Reactor by broadcasting new peer info
 func (r *CompletePeeringReactor) AddPeer(peer p2p.Peer) {
 	if !r.IsRunning() {
+		return
+	}
+
+	if !peer.NodeInfo().(nodeinfo.Default).IsValidator {
 		return
 	}
 

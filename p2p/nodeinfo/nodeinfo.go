@@ -75,6 +75,8 @@ type Default struct {
 	// ASCIIText fields
 	Moniker string       `json:"moniker"` // arbitrary moniker
 	Other   DefaultOther `json:"other"`   // other application specific data
+
+	IsValidator bool `json:"is_validator"`
 }
 
 // DefaultOther is the misc. application specific data.
@@ -237,6 +239,7 @@ func (info Default) ToProto() *tmp2p.DefaultNodeInfo {
 		TxIndex:    info.Other.TxIndex,
 		RPCAddress: info.Other.RPCAddress,
 	}
+	dni.IsValidator = info.IsValidator
 
 	return dni
 }
@@ -262,6 +265,7 @@ func DefaultFromToProto(pb *tmp2p.DefaultNodeInfo) (Default, error) {
 			TxIndex:    pb.Other.TxIndex,
 			RPCAddress: pb.Other.RPCAddress,
 		},
+		IsValidator: pb.IsValidator,
 	}
 
 	return dni, nil

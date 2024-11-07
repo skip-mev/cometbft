@@ -93,6 +93,8 @@ type Node struct {
 	indexerService    *txindex.IndexerService
 	prometheusSrv     *http.Server
 	pprofSrv          *http.Server
+
+	isValidator bool
 }
 
 type waitSyncP2PReactor interface {
@@ -427,7 +429,7 @@ func NewNodeWithCliParams(ctx context.Context,
 		}
 	}
 
-	logNodeStartupInfo(state, pubKey, logger, consensusLogger)
+	isValidator := logNodeStartupInfo(state, pubKey, logger, consensusLogger)
 
 	// Blocksync is always active, except if the local node blocks the chain
 	waitSync := !state.Validators.ValidatorBlocksTheChain(localAddr)
@@ -499,7 +501,7 @@ func NewNodeWithCliParams(ctx context.Context,
 	)
 	stateSyncReactor.SetLogger(logger.With("module", "statesync"))
 
-	nodeInfo, err := makeNodeInfo(config, nodeKey, txIndexer, genDoc, state)
+	nodeInfo, err := makeNodeInfo(config, nodeKey, txIndexer, genDoc, state, isValidator)
 	if err != nil {
 		return nil, err
 	}
@@ -544,9 +546,11 @@ func NewNodeWithCliParams(ctx context.Context,
 		pexReactor = createPEXReactorAndAddToSwitch(addrBook, config, sw, logger)
 	}
 
-	completePeeringReactor := complete.NewCompletePeeringReactor(sw)
-	completePeeringReactor.SetLogger(logger.With("module", "complete_peering"))
-	sw.AddReactor("COMPLETEPEERING", completePeeringReactor)
+	if isValidator {
+		completePeeringReactor := complete.NewCompletePeeringReactor(sw)
+		completePeeringReactor.SetLogger(logger.With("module", "complete_peering"))
+		sw.AddReactor("COMPLETEPEERING", completePeeringReactor)
+	}
 
 	// Add private IDs to addrbook to block those peers being added
 	addrBook.AddPrivateIDs(splitAndTrimEmpty(config.P2P.PrivatePeerIDs, ",", " "))
@@ -580,6 +584,8 @@ func NewNodeWithCliParams(ctx context.Context,
 		indexerService:   indexerService,
 		blockIndexer:     blockIndexer,
 		eventBus:         eventBus,
+
+		isValidator: isValidator,
 	}
 	node.BaseService = *service.NewBaseService(logger, "Node", node)
 
@@ -1091,6 +1097,7 @@ func makeNodeInfo(
 	txIndexer txindex.TxIndexer,
 	genDoc *types.GenesisDoc,
 	state sm.State,
+	isValidator bool,
 ) (ni.Default, error) {
 	txIndexerStatus := "on"
 	if _, ok := txIndexer.(*null.TxIndex); ok {
@@ -1118,6 +1125,7 @@ func makeNodeInfo(
 			TxIndex:    txIndexerStatus,
 			RPCAddress: config.RPC.ListenAddress,
 		},
+		IsValidator: isValidator,
 	}
 
 	if config.P2P.PexReactor {
