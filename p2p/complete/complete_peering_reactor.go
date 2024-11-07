@@ -70,6 +70,7 @@ func (r *CompletePeeringReactor) AddPeer(peer p2p.Peer) {
 	}
 
 	if !peer.NodeInfo().(nodeinfo.Default).IsValidator {
+		r.Logger.Info("Not broadcasting peer info for non-validator", "peer", peer)
 		return
 	}
 

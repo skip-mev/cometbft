@@ -253,10 +253,20 @@ func (sw *Switch) OnStart() error {
 				return
 			}
 			outbound, inbound, dialing := sw.NumPeers()
+
+			// Count validator peers
+			validatorCount := 0
+			sw.peers.ForEach(func(p Peer) {
+				if p.NodeInfo().(ni.Default).IsValidator {
+					validatorCount++
+				}
+			})
+
 			sw.Logger.Info("Peer status",
 				"outbound", outbound,
 				"inbound", inbound,
-				"dialing", dialing)
+				"dialing", dialing,
+				"validators", validatorCount)
 			time.Sleep(2 * time.Second)
 		}
 	}()

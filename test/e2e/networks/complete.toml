@@ -19,3 +19,9 @@ validator04 = 1
     mode = "validator"
     persistent_peers = ["validator01"]
     perturb = ["disconnect"]
+  [node.full01]
+    mode = "full"
+    persistent_peers = ["validator02"]
+  [node.full02]
+    mode = "full"
+    persistent_peers = ["validator02"]
