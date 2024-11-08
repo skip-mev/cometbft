@@ -5,6 +5,8 @@ validator01 = 1
 validator02 = 1
 validator03 = 1
 validator04 = 1
+validator05 = 1
+validator06 = 1
 
 [node]
   [node.validator01]
@@ -19,6 +21,12 @@ validator04 = 1
     mode = "validator"
     persistent_peers = ["validator01"]
     perturb = ["disconnect"]
+  [node.validator05]
+    mode = "validator"
+    persistent_peers = ["validator03"]
+  [node.validator06]
+    mode = "validator"
+    persistent_peers = ["validator04"]
   [node.full01]
     mode = "full"
     persistent_peers = ["validator02"]
