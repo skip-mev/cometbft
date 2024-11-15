@@ -36,6 +36,7 @@ import (
 	"github.com/cometbft/cometbft/p2p/nodekey"
 	"github.com/cometbft/cometbft/p2p/pex"
 	"github.com/cometbft/cometbft/p2p/transport/tcp"
+	"github.com/cometbft/cometbft/p2p/valp2p"
 	"github.com/cometbft/cometbft/proxy"
 	rpccore "github.com/cometbft/cometbft/rpc/core"
 	grpcserver "github.com/cometbft/cometbft/rpc/grpc/server"
@@ -546,11 +547,15 @@ func NewNodeWithCliParams(ctx context.Context,
 		pexReactor = createPEXReactorAndAddToSwitch(addrBook, config, sw, logger)
 	}
 
-	if isValidator {
-		completePeeringReactor := complete.NewCompletePeeringReactor(sw)
-		completePeeringReactor.SetLogger(logger.With("module", "complete_peering"))
-		sw.AddReactor("COMPLETEPEERING", completePeeringReactor)
-	}
+	// if isValidator {
+	// 	completePeeringReactor := complete.NewCompletePeeringReactor(sw)
+	// 	completePeeringReactor.SetLogger(logger.With("module", "complete_peering"))
+	// 	sw.AddReactor("COMPLETEPEERING", completePeeringReactor)
+	// }
+
+	valp2pReactor := valp2p.NewValp2pReactor(sw, isValidator, config.P2P.ValPeerCountLow, config.P2P.ValPeerCountHigh, config.P2P.ValPeerCountTarget)
+	valp2pReactor.SetLogger(logger.With("module", "valp2p"))
+	sw.AddReactor("VALP2P", valp2pReactor)
 
 	// Add private IDs to addrbook to block those peers being added
 	addrBook.AddPrivateIDs(splitAndTrimEmpty(config.P2P.PrivatePeerIDs, ",", " "))

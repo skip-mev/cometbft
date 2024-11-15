@@ -253,15 +253,7 @@ func (sw *Switch) OnStart() error {
 				return
 			}
 			outbound, inbound, dialing := sw.NumPeers()
-
-			// Count validator peers
-			validatorCount := 0
-			sw.peers.ForEach(func(p Peer) {
-				if p.NodeInfo().(ni.Default).IsValidator {
-					validatorCount++
-				}
-			})
-
+			validatorCount := sw.NumValPeers()
 			sw.Logger.Info("Peer status",
 				"outbound", outbound,
 				"inbound", inbound,
@@ -330,6 +322,17 @@ func (sw *Switch) NumPeers() (outbound, inbound, dialing int) {
 	})
 	dialing = sw.dialing.Size()
 	return outbound, inbound, dialing
+}
+
+func (sw *Switch) NumValPeers() int {
+	// Count validator peers
+	validatorCount := 0
+	sw.peers.ForEach(func(p Peer) {
+		if p.NodeInfo().(ni.Default).IsValidator {
+			validatorCount++
+		}
+	})
+	return validatorCount
 }
 
 func (sw *Switch) IsPeerUnconditional(id nodekey.ID) bool {
@@ -566,6 +569,21 @@ func (sw *Switch) dialPeersAsync(netAddrs []*na.NetAddr) {
 			}
 		}(i)
 	}
+}
+
+func (sw *Switch) DialValidatorWithAddress(addr *na.NetAddr) error {
+	err := sw.DialPeerWithAddress(addr)
+	if err != nil {
+		return err
+	}
+
+	peer := sw.peers.Get(addr.ID)
+	if !peer.NodeInfo().(ni.Default).IsValidator {
+		sw.StopPeerGracefully(peer)
+		return errors.New("peer is not a validator")
+	}
+
+	return nil
 }
 
 // DialPeerWithAddress dials the given peer and runs sw.addPeer if it connects
