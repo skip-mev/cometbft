@@ -46,14 +46,17 @@ type Valp2pReactor struct {
 }
 
 func NewValp2pReactor(sw *p2p.Switch, isValidator bool, valPeerCountLow int, valPeerCountHigh int, valPeerCountTarget int) *Valp2pReactor {
-	return &Valp2pReactor{
+	r := &Valp2pReactor{
 		sw:                 sw,
 		isValidator:        isValidator,
 		valPeerCountLow:    valPeerCountLow,
 		valPeerCountHigh:   valPeerCountHigh,
 		valPeerCountTarget: valPeerCountTarget,
+		valAddressBook:     make(map[nodekey.ID]na.NetAddr),
 		rng:                rand.NewRand(),
 	}
+	r.BaseReactor = *p2p.NewBaseReactor("Valp2p", r)
+	return r
 }
 
 func (r *Valp2pReactor) StreamDescriptors() []p2p.StreamDescriptor {
@@ -79,6 +82,7 @@ func (r *Valp2pReactor) OnStart() error {
 
 			if len(r.valAddressBook) < r.valPeerCountHigh {
 				// send a valP2pRequest to a random peer
+				r.Logger.Info("Sending valP2pRequest to a random peer")
 				peer := r.sw.Peers().Random()
 				peer.Send(p2p.Envelope{
 					ChannelID: Valp2pChannel,
@@ -88,6 +92,7 @@ func (r *Valp2pReactor) OnStart() error {
 
 			if r.sw.NumValPeers() < r.valPeerCountTarget && len(r.valAddressBook) > 0 {
 				// dial a random validator
+				r.Logger.Info("Dialing a random validator")
 				keys := make([]nodekey.ID, 0, len(r.valAddressBook))
 				for key := range r.valAddressBook {
 					keys = append(keys, key)
@@ -99,7 +104,18 @@ func (r *Valp2pReactor) OnStart() error {
 		}
 	}()
 
-	// TODO(wllmshao): add a goroutine that periodically checks validator address book peers against state and removes those that are not validators
+	go func() {
+		for {
+			time.Sleep(1 * time.Minute)
+
+			for k := range r.valAddressBook {
+				if peer := r.sw.Peers().Get(k); peer != nil && !peer.NodeInfo().(nodeinfo.Default).IsValidator {
+					r.Logger.Info("Removing non-validator from address book", "addr", k)
+					delete(r.valAddressBook, k)
+				}
+			}
+		}
+	}()
 
 	return nil
 }
@@ -138,6 +154,7 @@ func (r *Valp2pReactor) Receive(e p2p.Envelope) {
 	}
 
 	r.Logger.Info("Received message", "src", e.Src, "chId", e.ChannelID, "msg", e.Message)
+
 	switch msg := e.Message.(type) {
 	case *tmp2p.Valp2PAddr:
 		r.Logger.Info("Received val info", "addr", msg.Addr)

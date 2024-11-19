@@ -1,0 +1,35 @@
+disable_pex = true
+
+[validators]
+validator01 = 1
+validator02 = 1
+validator03 = 1
+validator04 = 1
+validator05 = 1
+validator06 = 1
+
+[node]
+  [node.validator01]
+    mode = "validator"
+  [node.validator02]
+    mode = "validator"
+    persistent_peers = ["validator01"]
+  [node.validator03]
+    mode = "validator"
+    persistent_peers = ["validator01"]
+  [node.validator04]
+    mode = "validator"
+    persistent_peers = ["validator01"]
+    perturb = ["disconnect"]
+  [node.validator05]
+    mode = "validator"
+    persistent_peers = ["validator03"]
+  [node.validator06]
+    mode = "validator"
+    persistent_peers = ["validator04"]
+  [node.full01]
+    mode = "full"
+    persistent_peers = ["validator02"]
+  [node.full02]
+    mode = "full"
+    persistent_peers = ["validator02"]

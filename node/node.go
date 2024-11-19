@@ -30,7 +30,6 @@ import (
 	"github.com/cometbft/cometbft/light"
 	mempl "github.com/cometbft/cometbft/mempool"
 	"github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/p2p/complete"
 	na "github.com/cometbft/cometbft/p2p/netaddr"
 	ni "github.com/cometbft/cometbft/p2p/nodeinfo"
 	"github.com/cometbft/cometbft/p2p/nodekey"
@@ -552,6 +551,16 @@ func NewNodeWithCliParams(ctx context.Context,
 	// 	completePeeringReactor.SetLogger(logger.With("module", "complete_peering"))
 	// 	sw.AddReactor("COMPLETEPEERING", completePeeringReactor)
 	// }
+
+	if config.P2P.ValPeerCountLow == 0 {
+		config.P2P.ValPeerCountLow = 2
+	}
+	if config.P2P.ValPeerCountHigh == 0 {
+		config.P2P.ValPeerCountHigh = 5
+	}
+	if config.P2P.ValPeerCountTarget == 0 {
+		config.P2P.ValPeerCountTarget = 4
+	}
 
 	valp2pReactor := valp2p.NewValp2pReactor(sw, isValidator, config.P2P.ValPeerCountLow, config.P2P.ValPeerCountHigh, config.P2P.ValPeerCountTarget)
 	valp2pReactor.SetLogger(logger.With("module", "valp2p"))
@@ -1137,7 +1146,8 @@ func makeNodeInfo(
 		nodeInfo.Channels = append(nodeInfo.Channels, pex.PexChannel)
 	}
 
-	nodeInfo.Channels = append(nodeInfo.Channels, complete.PeeringChannel)
+	// nodeInfo.Channels = append(nodeInfo.Channels, complete.PeeringChannel)
+	nodeInfo.Channels = append(nodeInfo.Channels, valp2p.Valp2pChannel)
 
 	lAddr := config.P2P.ExternalAddress
 
