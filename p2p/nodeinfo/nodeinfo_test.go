@@ -26,6 +26,7 @@ func (ni mockNodeInfo) NetAddr() (*na.NetAddr, error)                    { retur
 func (mockNodeInfo) Validate() error                                     { return nil }
 func (mockNodeInfo) CompatibleWith(NodeInfo) error                       { return nil }
 func (mockNodeInfo) Handshake(net.Conn, time.Duration) (NodeInfo, error) { return nil, nil }
+func (mockNodeInfo) SetAuthChallenge([]byte)                             {}
 
 func testNodeInfo(id nodekey.ID) NodeInfo {
 	return Default{

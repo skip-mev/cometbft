@@ -1,15 +1,18 @@
 package p2p
 
 import (
+	"crypto/rand"
 	"fmt"
 	"net"
 	"time"
 
 	tmp2p "github.com/cometbft/cometbft/api/cometbft/p2p/v1"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/libs/protoio"
 	na "github.com/cometbft/cometbft/p2p/netaddr"
 	ni "github.com/cometbft/cometbft/p2p/nodeinfo"
 	"github.com/cometbft/cometbft/p2p/nodekey"
+	"github.com/cometbft/cometbft/types"
 )
 
 // ErrRejected indicates that a Peer was rejected carrying additional
@@ -97,8 +100,8 @@ func (e ErrRejected) IsNodeInfoInvalid() bool { return e.isNodeInfoInvalid }
 func (e ErrRejected) IsSelf() bool { return e.isSelf }
 
 // Do a handshake and verify the node info.
-func handshake(ourNodeInfo ni.NodeInfo, c net.Conn, handshakeTimeout time.Duration) (ni.NodeInfo, error) {
-	nodeInfo, err := exchangeNodeInfo(ourNodeInfo, c, handshakeTimeout)
+func handshake(ourNodeInfo ni.NodeInfo, c net.Conn, handshakeTimeout time.Duration, privValidator types.PrivValidator) (ni.NodeInfo, error) {
+	nodeInfo, authChallenge, err := exchangeNodeInfo(ourNodeInfo, c, handshakeTimeout)
 	if err != nil {
 		return nil, ErrRejected{
 			conn:          c,
@@ -107,13 +110,59 @@ func handshake(ourNodeInfo ni.NodeInfo, c net.Conn, handshakeTimeout time.Durati
 		}
 	}
 
-	// TODO(wllmshao): implement challenge signing handshake for two validators
-
 	if err := nodeInfo.Validate(); err != nil {
 		return nil, ErrRejected{
 			conn:              c,
 			err:               err,
 			isNodeInfoInvalid: true,
+		}
+	}
+
+	// TODO(wllmshao): currently if you lose your validator status, this will get your connections rejected
+	// because you will still be claiming to be a validator.
+
+	// TODO(wllmshao): this currently doesn't check if the pubkey is actually a validator, but can be done
+	// by checking the state.Validators.HasAddress(addr). this means we need a way to pass the state into
+	// this function, and have that state be updated periodically to remain accurate.
+
+	// If we are both validators, we need to exchange signed auth challenges
+	if ourNodeInfo.(ni.Default).IsValidator && nodeInfo.(ni.Default).IsValidator && privValidator != nil {
+		// Check that the peer provided an auth challenge and pubkey
+		if nodeInfo.(ni.Default).AuthChallenge == nil || nodeInfo.(ni.Default).PubKey == nil ||
+			len(nodeInfo.(ni.Default).AuthChallenge) != 32 || len(nodeInfo.(ni.Default).PubKey) == 0 {
+			return nil, ErrRejected{
+				conn:          c,
+				err:           fmt.Errorf("validator must provide auth challenge and pubkey"),
+				isAuthFailure: true,
+			}
+		}
+
+		// Sign the peer's auth challenge
+		authChallengeToSign := nodeInfo.(ni.Default).AuthChallenge
+		signature, err := privValidator.SignBytes(authChallengeToSign)
+		if err != nil {
+			return nil, ErrRejected{
+				conn:          c,
+				isAuthFailure: true,
+			}
+		}
+
+		// Exchange the signed auth challenge
+		signatureNi, err := exchangeSignedAuthChallenge(signature, c, handshakeTimeout)
+		if err != nil {
+			return nil, ErrRejected{
+				conn:          c,
+				isAuthFailure: true,
+			}
+		}
+
+		// Verify the peer's signed auth challenge
+		peerPubkey := ed25519.PubKey(nodeInfo.(ni.Default).PubKey)
+		if !peerPubkey.VerifySignature(authChallenge, signatureNi.(ni.Default).AuthChallenge) {
+			return nil, ErrRejected{
+				conn:          c,
+				isAuthFailure: true,
+			}
 		}
 	}
 
@@ -157,7 +206,52 @@ func handshake(ourNodeInfo ni.NodeInfo, c net.Conn, handshakeTimeout time.Durati
 	return nodeInfo, nil
 }
 
-func exchangeNodeInfo(ourNodeInfo ni.NodeInfo, c net.Conn, timeout time.Duration) (peerNodeInfo ni.NodeInfo, err error) {
+func exchangeNodeInfo(ourNodeInfo ni.NodeInfo, c net.Conn, timeout time.Duration) (peerNodeInfo ni.NodeInfo, authChallenge []byte, err error) {
+	if err := c.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return nil, nil, err
+	}
+
+	// generate 32 random bytes as the challenge
+	authChallenge = make([]byte, 32)
+	_, err = rand.Read(authChallenge)
+	if err != nil {
+		return nil, nil, err
+	}
+	ourNodeInfoDefault := ourNodeInfo.(ni.Default)
+	ourNodeInfoDefault.AuthChallenge = authChallenge
+
+	var (
+		errc           = make(chan error, 2)
+		pbpeerNodeInfo tmp2p.DefaultNodeInfo
+	)
+
+	go func(errc chan<- error, c net.Conn) {
+		ourNodeInfoProto := ourNodeInfoDefault.ToProto()
+		_, err := protoio.NewDelimitedWriter(c).WriteMsg(ourNodeInfoProto)
+		errc <- err
+	}(errc, c)
+	go func(errc chan<- error, c net.Conn) {
+		protoReader := protoio.NewDelimitedReader(c, ni.MaxSize())
+		_, err := protoReader.ReadMsg(&pbpeerNodeInfo)
+		errc <- err
+	}(errc, c)
+
+	for i := 0; i < cap(errc); i++ {
+		err := <-errc
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	peerNodeInfo, err = ni.DefaultFromToProto(&pbpeerNodeInfo)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return peerNodeInfo, authChallenge, c.SetDeadline(time.Time{})
+}
+
+func exchangeSignedAuthChallenge(signature []byte, c net.Conn, timeout time.Duration) (peerNodeInfo ni.NodeInfo, err error) {
 	if err := c.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return nil, err
 	}
@@ -167,8 +261,12 @@ func exchangeNodeInfo(ourNodeInfo ni.NodeInfo, c net.Conn, timeout time.Duration
 		pbpeerNodeInfo tmp2p.DefaultNodeInfo
 	)
 
+	ourNodeInfo := ni.Default{
+		AuthChallenge: signature,
+	}
+
 	go func(errc chan<- error, c net.Conn) {
-		ourNodeInfoProto := ourNodeInfo.(ni.Default).ToProto()
+		ourNodeInfoProto := ourNodeInfo.ToProto()
 		_, err := protoio.NewDelimitedWriter(c).WriteMsg(ourNodeInfoProto)
 		errc <- err
 	}(errc, c)
@@ -185,6 +283,7 @@ func exchangeNodeInfo(ourNodeInfo ni.NodeInfo, c net.Conn, timeout time.Duration
 		}
 	}
 
+	// TODO(wllmshao): we're assuming here that the peer will not change their pubkey
 	peerNodeInfo, err = ni.DefaultFromToProto(&pbpeerNodeInfo)
 	if err != nil {
 		return nil, err

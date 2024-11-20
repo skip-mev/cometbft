@@ -31,6 +31,8 @@ message DefaultNodeInfo {
   string               moniker          = 7;
   DefaultNodeInfoOther other            = 8 [(gogoproto.nullable) = false];
   bool                 is_validator     = 9;
+  bytes                pubkey           = 10;
+  bytes                auth_challenge   = 11;
 }
 
 // DefaultNodeInfoOther is the misc. application specific data.

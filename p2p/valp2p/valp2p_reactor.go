@@ -84,10 +84,12 @@ func (r *Valp2pReactor) OnStart() error {
 				// send a valP2pRequest to a random peer
 				r.Logger.Info("Sending valP2pRequest to a random peer")
 				peer := r.sw.Peers().Random()
-				peer.Send(p2p.Envelope{
-					ChannelID: Valp2pChannel,
-					Message:   &tmp2p.Valp2PRequest{},
-				})
+				if peer != nil {
+					peer.Send(p2p.Envelope{
+						ChannelID: Valp2pChannel,
+						Message:   &tmp2p.Valp2PRequest{},
+					})
+				}
 			}
 
 			if r.sw.NumValPeers() < r.valPeerCountTarget && len(r.valAddressBook) > 0 {

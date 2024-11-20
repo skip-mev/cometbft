@@ -160,7 +160,7 @@ func (sw *Switch) addPeerWithConnection(conn net.Conn) error {
 		return err
 	}
 
-	ni, err := handshake(sw.nodeInfo, conn, time.Second)
+	ni, err := handshake(sw.nodeInfo, conn, time.Second, nil)
 	if err != nil {
 		if cErr := conn.Close(); cErr != nil {
 			sw.Logger.Error("Error closing connection", "err", cErr)
@@ -224,7 +224,7 @@ func MakeSwitch(
 	}
 
 	// TODO: let the config be passed in?
-	sw := initSwitch(i, NewSwitch(cfg, t, opts...))
+	sw := initSwitch(i, NewSwitch(cfg, t, nil, opts...))
 	sw.SetLogger(log.TestingLogger().With("switch", i))
 	sw.SetNodeKey(&nk)
 
@@ -316,6 +316,7 @@ func (ni mockNodeInfo) NetAddr() (*na.NetAddr, error)                       { re
 func (mockNodeInfo) Validate() error                                        { return nil }
 func (mockNodeInfo) CompatibleWith(ni.NodeInfo) error                       { return nil }
 func (mockNodeInfo) Handshake(net.Conn, time.Duration) (ni.NodeInfo, error) { return nil, nil }
+func (mockNodeInfo) SetAuthChallenge([]byte)                                {}
 
 func testNodeInfo(id nodekey.ID, name string) ni.Default {
 	return ni.Default{

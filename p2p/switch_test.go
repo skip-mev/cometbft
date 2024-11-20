@@ -771,7 +771,7 @@ func (errorTransport) Cleanup(net.Conn) error {
 }
 
 func TestSwitchAcceptRoutineErrorCases(t *testing.T) {
-	sw := NewSwitch(cfg, errorTransport{tcp.ErrFilterTimeout{}})
+	sw := NewSwitch(cfg, errorTransport{tcp.ErrFilterTimeout{}}, nil)
 	assert.NotPanics(t, func() {
 		err := sw.Start()
 		require.NoError(t, err)
@@ -788,7 +788,7 @@ func TestSwitchAcceptRoutineErrorCases(t *testing.T) {
 	// })
 	// TODO(melekes) check we remove our address from addrBook
 
-	sw = NewSwitch(cfg, errorTransport{tcp.ErrTransportClosed{}})
+	sw = NewSwitch(cfg, errorTransport{tcp.ErrTransportClosed{}}, nil)
 	assert.NotPanics(t, func() {
 		err := sw.Start()
 		require.NoError(t, err)

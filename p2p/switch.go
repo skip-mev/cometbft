@@ -17,6 +17,7 @@ import (
 	"github.com/cometbft/cometbft/p2p/nodekey"
 	"github.com/cometbft/cometbft/p2p/transport/tcp"
 	"github.com/cometbft/cometbft/p2p/transport/tcp/conn"
+	"github.com/cometbft/cometbft/types"
 )
 
 const (
@@ -101,6 +102,8 @@ type Switch struct {
 	rng *rand.Rand // seed for randomizing dial times and orders
 
 	metrics *Metrics
+
+	privValidator types.PrivValidator
 }
 
 // NetAddr returns the address the switch is listening on.
@@ -116,6 +119,7 @@ type SwitchOption func(*Switch)
 func NewSwitch(
 	cfg *config.P2PConfig,
 	transport Transport,
+	privValidator types.PrivValidator,
 	options ...SwitchOption,
 ) *Switch {
 	sw := &Switch{
@@ -132,6 +136,7 @@ func NewSwitch(
 		filterTimeout:        defaultFilterTimeout,
 		persistentPeersAddrs: make([]*na.NetAddr, 0),
 		unconditionalPeerIDs: make(map[nodekey.ID]struct{}),
+		privValidator:        privValidator,
 	}
 
 	// Ensure we have a completely undeterministic PRNG.
@@ -716,7 +721,7 @@ func (sw *Switch) acceptRoutine() {
 			break
 		}
 
-		nodeInfo, err := handshake(sw.nodeInfo, conn, sw.config.HandshakeTimeout)
+		nodeInfo, err := handshake(sw.nodeInfo, conn, sw.config.HandshakeTimeout, sw.privValidator)
 		if err != nil {
 			errRejected, ok := err.(ErrRejected)
 			if ok && errRejected.IsSelf() {
@@ -812,7 +817,7 @@ func (sw *Switch) addOutboundPeerWithConfig(
 		return err
 	}
 
-	nodeInfo, err := handshake(sw.nodeInfo, conn, sw.config.HandshakeTimeout)
+	nodeInfo, err := handshake(sw.nodeInfo, conn, sw.config.HandshakeTimeout, sw.privValidator)
 	if err != nil {
 		errRejected, ok := err.(ErrRejected)
 		if ok && errRejected.IsSelf() {

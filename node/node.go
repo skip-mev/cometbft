@@ -501,7 +501,7 @@ func NewNodeWithCliParams(ctx context.Context,
 	)
 	stateSyncReactor.SetLogger(logger.With("module", "statesync"))
 
-	nodeInfo, err := makeNodeInfo(config, nodeKey, txIndexer, genDoc, state, isValidator)
+	nodeInfo, err := makeNodeInfo(config, nodeKey, txIndexer, genDoc, state, isValidator, pubKey.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -512,6 +512,7 @@ func NewNodeWithCliParams(ctx context.Context,
 	sw := createSwitch(
 		config, transport, p2pMetrics, peerFilters, mempoolReactor, bcReactor,
 		stateSyncReactor, consensusReactor, evidenceReactor, nodeInfo, nodeKey, p2pLogger,
+		privValidator,
 	)
 
 	err = sw.AddPersistentPeers(splitAndTrimEmpty(config.P2P.PersistentPeers, ",", " "))
@@ -1112,6 +1113,7 @@ func makeNodeInfo(
 	genDoc *types.GenesisDoc,
 	state sm.State,
 	isValidator bool,
+	pubKey []byte,
 ) (ni.Default, error) {
 	txIndexerStatus := "on"
 	if _, ok := txIndexer.(*null.TxIndex); ok {
@@ -1140,6 +1142,7 @@ func makeNodeInfo(
 			RPCAddress: config.RPC.ListenAddress,
 		},
 		IsValidator: isValidator,
+		PubKey:      pubKey,
 	}
 
 	if config.P2P.PexReactor {

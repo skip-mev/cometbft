@@ -491,10 +491,12 @@ func createSwitch(config *cfg.Config,
 	nodeInfo ni.NodeInfo,
 	nodeKey *nodekey.NodeKey,
 	p2pLogger log.Logger,
+	privValidator types.PrivValidator,
 ) *p2p.Switch {
 	sw := p2p.NewSwitch(
 		config.P2P,
 		transport,
+		privValidator,
 		p2p.WithMetrics(p2pMetrics),
 		p2p.SwitchPeerFilters(peerFilters...),
 	)

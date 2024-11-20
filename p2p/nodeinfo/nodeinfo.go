@@ -76,7 +76,9 @@ type Default struct {
 	Moniker string       `json:"moniker"` // arbitrary moniker
 	Other   DefaultOther `json:"other"`   // other application specific data
 
-	IsValidator bool `json:"is_validator"`
+	IsValidator   bool   `json:"is_validator"`
+	PubKey        []byte `json:"pub_key"`
+	AuthChallenge []byte `json:"auth_challenge"`
 }
 
 // DefaultOther is the misc. application specific data.
@@ -240,6 +242,8 @@ func (info Default) ToProto() *tmp2p.DefaultNodeInfo {
 		RPCAddress: info.Other.RPCAddress,
 	}
 	dni.IsValidator = info.IsValidator
+	dni.Pubkey = info.PubKey
+	dni.AuthChallenge = info.AuthChallenge
 
 	return dni
 }
@@ -265,7 +269,9 @@ func DefaultFromToProto(pb *tmp2p.DefaultNodeInfo) (Default, error) {
 			TxIndex:    pb.Other.TxIndex,
 			RPCAddress: pb.Other.RPCAddress,
 		},
-		IsValidator: pb.IsValidator,
+		IsValidator:   pb.IsValidator,
+		PubKey:        pb.Pubkey,
+		AuthChallenge: pb.AuthChallenge,
 	}
 
 	return dni, nil
