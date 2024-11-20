@@ -107,7 +107,7 @@ func handshake(ourNodeInfo ni.NodeInfo, c net.Conn, handshakeTimeout time.Durati
 		}
 	}
 
-	// TODO(wllmshao): do a diffie-hellman key exchange to verify validator status if they are a validator
+	// TODO(wllmshao): implement challenge signing handshake for two validators
 
 	if err := nodeInfo.Validate(); err != nil {
 		return nil, ErrRejected{
