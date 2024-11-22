@@ -25,6 +25,7 @@ import (
 	mempl "github.com/cometbft/cometbft/mempool"
 	"github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/p2p/pex"
+	"github.com/cometbft/cometbft/p2p/valp2p"
 	"github.com/cometbft/cometbft/proxy"
 	rpccore "github.com/cometbft/cometbft/rpc/core"
 	grpccore "github.com/cometbft/cometbft/rpc/grpc"
@@ -374,7 +375,7 @@ func NewNodeWithContext(ctx context.Context,
 	// app may modify the validator set, specifying ourself as the only validator.
 	blockSync := !onlyValidatorIsUs(state, localAddr)
 
-	logNodeStartupInfo(state, pubKey, logger, consensusLogger)
+	isValidator := logNodeStartupInfo(state, pubKey, logger, consensusLogger)
 
 	mempool, mempoolReactor := createMempoolAndMempoolReactor(config, proxyApp, state, memplMetrics, logger)
 
@@ -428,7 +429,7 @@ func NewNodeWithContext(ctx context.Context,
 	)
 	stateSyncReactor.SetLogger(logger.With("module", "statesync"))
 
-	nodeInfo, err := makeNodeInfo(config, nodeKey, txIndexer, genDoc, state)
+	nodeInfo, err := makeNodeInfo(config, nodeKey, txIndexer, genDoc, state, isValidator)
 	if err != nil {
 		return nil, err
 	}
@@ -472,6 +473,20 @@ func NewNodeWithContext(ctx context.Context,
 	if config.P2P.PexReactor {
 		pexReactor = createPEXReactorAndAddToSwitch(addrBook, config, sw, logger)
 	}
+
+	if config.P2P.ValPeerCountLow == 0 {
+		config.P2P.ValPeerCountLow = 2
+	}
+	if config.P2P.ValPeerCountHigh == 0 {
+		config.P2P.ValPeerCountHigh = 5
+	}
+	if config.P2P.ValPeerCountTarget == 0 {
+		config.P2P.ValPeerCountTarget = 4
+	}
+
+	valp2pReactor := valp2p.NewValp2pReactor(sw, isValidator, config.P2P.ValPeerCountLow, config.P2P.ValPeerCountHigh, config.P2P.ValPeerCountTarget)
+	valp2pReactor.SetLogger(logger.With("module", "valp2p"))
+	sw.AddReactor("VALP2P", valp2pReactor)
 
 	// Add private IDs to addrbook to block those peers being added
 	addrBook.AddPrivateIDs(splitAndTrimEmpty(config.P2P.PrivatePeerIDs, ",", " "))
@@ -931,6 +946,7 @@ func makeNodeInfo(
 	txIndexer txindex.TxIndexer,
 	genDoc *types.GenesisDoc,
 	state sm.State,
+	isValidator bool,
 ) (p2p.DefaultNodeInfo, error) {
 	txIndexerStatus := "on"
 	if _, ok := txIndexer.(*null.TxIndex); ok {
@@ -958,11 +974,14 @@ func makeNodeInfo(
 			TxIndex:    txIndexerStatus,
 			RPCAddress: config.RPC.ListenAddress,
 		},
+		IsValidator: isValidator,
 	}
 
 	if config.P2P.PexReactor {
 		nodeInfo.Channels = append(nodeInfo.Channels, pex.PexChannel)
 	}
+
+	nodeInfo.Channels = append(nodeInfo.Channels, valp2p.Valp2pChannel)
 
 	lAddr := config.P2P.ExternalAddress
 

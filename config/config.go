@@ -604,6 +604,10 @@ type P2PConfig struct { //nolint: maligned
 	HandshakeTimeout time.Duration `mapstructure:"handshake_timeout"`
 	DialTimeout      time.Duration `mapstructure:"dial_timeout"`
 
+	ValPeerCountLow    int `mapstructure:"val_peer_count_low"`
+	ValPeerCountHigh   int `mapstructure:"val_peer_count_high"`
+	ValPeerCountTarget int `mapstructure:"val_peer_count_target"`
+
 	// Testing params.
 	// Force dial to fail
 	TestDialFail bool `mapstructure:"test_dial_fail"`

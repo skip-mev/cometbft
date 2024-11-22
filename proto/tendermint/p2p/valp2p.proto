@@ -1,0 +1,25 @@
+syntax = "proto3";
+package tendermint.p2p;
+
+option go_package = "github.com/cometbft/cometbft/proto/tendermint/p2p";
+
+import "tendermint/p2p/types.proto";
+import "gogoproto/gogo.proto";
+
+message Valp2pRequest {}
+
+message Valp2pResponse {
+    repeated NetAddress addrs = 1 [(gogoproto.nullable) = false];
+}
+
+message Valp2pAddr {
+    NetAddress addr = 1 [(gogoproto.nullable) = false];
+}
+
+message Valp2pMessage {
+  oneof sum {
+        Valp2pRequest valp2p_request = 1;
+        Valp2pResponse valp2p_response = 2;
+        Valp2pAddr valp2p_addr = 3;
+  }
+}

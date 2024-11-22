@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -317,6 +318,32 @@ func (sw *Switch) NumPeers() (outbound, inbound, dialing int) {
 func (sw *Switch) IsPeerUnconditional(id ID) bool {
 	_, ok := sw.unconditionalPeerIDs[id]
 	return ok
+}
+
+func (sw *Switch) NumValPeers() int {
+	// Count validator peers
+	validatorCount := 0
+	for _, p := range sw.peers.List() {
+		if p.NodeInfo().(DefaultNodeInfo).IsValidator {
+			validatorCount++
+		}
+	}
+	return validatorCount
+}
+
+func (sw *Switch) DialValidatorWithAddress(addr *NetAddress) error {
+	err := sw.DialPeerWithAddress(addr)
+	if err != nil {
+		return err
+	}
+
+	peer := sw.peers.Get(addr.ID)
+	if !peer.NodeInfo().(DefaultNodeInfo).IsValidator {
+		sw.StopPeerGracefully(peer)
+		return errors.New("peer is not a validator")
+	}
+
+	return nil
 }
 
 // MaxNumOutboundPeers returns a maximum number of outbound peers.
